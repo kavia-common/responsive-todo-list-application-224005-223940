@@ -188,7 +188,7 @@ function TodoItem({ todo, onToggle, onDelete }) {
 function TodoList({ todos, onToggle, onDelete }) {
   if (todos.length === 0) {
     return (
-      <div className="todoEmpty" role="status">
+      <div className="todoEmpty" role="status" aria-live="polite">
         <div className="todoEmpty__title">No todos yet</div>
         <div className="todoEmpty__subtitle">
           Add one above to get started.
@@ -216,7 +216,7 @@ function BottomBar({
   return (
     <div className="bottomBar" role="region" aria-label="Todo controls">
       <div className="bottomBar__left">
-        <span className="bottomBar__count">
+        <span className="bottomBar__count" aria-live="polite">
           {remainingCount} {remainingCount === 1 ? "item" : "items"} left
         </span>
       </div>
@@ -232,6 +232,7 @@ function BottomBar({
             onClick={() => onChangeFilter(value)}
             role="tab"
             aria-selected={filter === value}
+            aria-current={filter === value ? "true" : undefined}
           >
             {key[0].toUpperCase() + key.slice(1)}
           </button>
@@ -245,6 +246,7 @@ function BottomBar({
           onClick={onClearCompleted}
           disabled={!hasCompleted}
           title="Remove completed todos"
+          aria-disabled={!hasCompleted}
         >
           Clear completed
         </button>

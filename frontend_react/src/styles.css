@@ -53,6 +53,15 @@ button:disabled {
   opacity: 0.6;
 }
 
+/* Consistent keyboard focus without noisy mouse focus */
+:where(button, input, [tabindex]):focus {
+  outline: none;
+}
+
+:where(button, input, [tabindex]):focus-visible {
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
 a {
   color: inherit;
 }
@@ -288,6 +297,27 @@ a {
   max-width: var(--container);
   color: var(--muted);
   font-size: 12px;
+}
+
+/* Mobile-first improvements: better stacking + larger tap targets on narrow screens */
+@media (max-width: 420px) {
+  .addTodo {
+    grid-template-columns: 1fr;
+  }
+
+  .addTodo__button {
+    width: 100%;
+  }
+
+  .todoItem {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .todoItem__delete {
+    width: 100%;
+    justify-self: stretch;
+  }
 }
 
 @media (min-width: 680px) {
