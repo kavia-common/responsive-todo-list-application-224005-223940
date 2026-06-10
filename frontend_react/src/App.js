@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const FILTERS = /** @type {const} */ ({
   all: "all",
@@ -10,13 +10,88 @@ const FILTERS = /** @type {const} */ ({
  * @typedef {{ id: string; title: string; completed: boolean }} Todo
  */
 
+const STORAGE_KEY = "kavia.responsive_todo.todos.v1";
+
 /**
  * Generate a stable-ish id without extra dependencies.
- * (Good enough for local-only todos; later step may refine if needed.)
+ * (Good enough for local-only todos.)
  * @returns {string}
  */
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/**
+ * Safely parse a JSON string without throwing.
+ * @param {string | null} raw
+ * @returns {unknown | null}
+ */
+function safeJsonParse(raw) {
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate and normalize a decoded localStorage payload into Todo[].
+ * @param {unknown} value
+ * @returns {Todo[]}
+ */
+function coerceTodos(value) {
+  if (!Array.isArray(value)) return [];
+  /** @type {Todo[]} */
+  const result = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    // @ts-ignore - runtime checks below
+    const id = item.id;
+    // @ts-ignore - runtime checks below
+    const title = item.title;
+    // @ts-ignore - runtime checks below
+    const completed = item.completed;
+
+    if (typeof id !== "string" || typeof title !== "string") continue;
+    if (typeof completed !== "boolean") continue;
+
+    const trimmed = title.trim();
+    if (!trimmed) continue;
+
+    result.push({ id, title: trimmed, completed });
+  }
+
+  return result;
+}
+
+/**
+ * Load todos from localStorage (if available).
+ * @returns {Todo[]}
+ */
+function loadTodosFromStorage() {
+  // Guard for environments where localStorage is unavailable (some privacy modes / tests).
+  if (typeof window === "undefined") return [];
+  if (!("localStorage" in window)) return [];
+
+  const parsed = safeJsonParse(window.localStorage.getItem(STORAGE_KEY));
+  return coerceTodos(parsed);
+}
+
+/**
+ * Save todos to localStorage (best-effort).
+ * @param {Todo[]} todos
+ */
+function saveTodosToStorage(todos) {
+  if (typeof window === "undefined") return;
+  if (!("localStorage" in window)) return;
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  } catch {
+    // Best-effort persistence; ignore quota/security errors.
+  }
 }
 
 function Header() {
@@ -34,6 +109,12 @@ function Header() {
 
 function AddTodoForm({ onAdd }) {
   const [value, setValue] = useState("");
+  const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+  useEffect(() => {
+    // Nice UX: focus the input on first mount.
+    inputRef.current?.focus();
+  }, []);
 
   return (
     <form
@@ -44,12 +125,15 @@ function AddTodoForm({ onAdd }) {
         if (!trimmed) return;
         onAdd(trimmed);
         setValue("");
+        // Keep flow fast for power-users.
+        inputRef.current?.focus();
       }}
     >
       <label className="srOnly" htmlFor="newTodo">
         Add a todo
       </label>
       <input
+        ref={inputRef}
         id="newTodo"
         className="addTodo__input"
         type="text"
@@ -143,9 +227,7 @@ function BottomBar({
             key={key}
             type="button"
             className={
-              filter === value
-                ? "filterButton isActive"
-                : "filterButton"
+              filter === value ? "filterButton isActive" : "filterButton"
             }
             onClick={() => onChangeFilter(value)}
             role="tab"
@@ -174,13 +256,15 @@ function BottomBar({
 export default function App() {
   const [filter, setFilter] = useState(FILTERS.all);
 
-  // NOTE: In step 2 we'll replace these with proper localStorage persistence.
+  // Load initial state from localStorage (only once on mount).
   const [todos, setTodos] = useState(
-    /** @type {Todo[]} */ ([
-      { id: makeId(), title: "Add your first todo", completed: false },
-      { id: makeId(), title: "Mark todos as complete", completed: true },
-    ])
+    /** @type {Todo[]} */ (() => loadTodosFromStorage())
   );
+
+  // Persist on every todos change (best-effort).
+  useEffect(() => {
+    saveTodosToStorage(todos);
+  }, [todos]);
 
   const visibleTodos = useMemo(() => {
     switch (filter) {
@@ -209,7 +293,13 @@ export default function App() {
         <section className="panel" aria-label="Todo panel">
           <AddTodoForm
             onAdd={(title) => {
-              setTodos((prev) => [{ id: makeId(), title, completed: false }, ...prev]);
+              setTodos((prev) => {
+                // Prevent accidental duplicates due to double-submit with same content.
+                // (This is conservative; still allows same title if a different todo exists.)
+                const normalized = title.trim();
+                if (!normalized) return prev;
+                return [{ id: makeId(), title: normalized, completed: false }, ...prev];
+              });
             }}
           />
 
@@ -219,9 +309,7 @@ export default function App() {
             todos={visibleTodos}
             onToggle={(id) => {
               setTodos((prev) =>
-                prev.map((t) =>
-                  t.id === id ? { ...t, completed: !t.completed } : t
-                )
+                prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
               );
             }}
             onDelete={(id) => {
@@ -245,7 +333,7 @@ export default function App() {
 
       <footer className="appFooter">
         <span className="appFooter__text">
-          Local-only demo · Step 2 will add persistence and final behaviors.
+          Local-only demo · Todos are saved to your browser automatically.
         </span>
       </footer>
     </div>
